@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Data Visualization</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0; padding: 0;
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px 10px;
+        }
+
+        h2 {
+            color: #fff;
+            font-weight: 700;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+            margin-bottom: 30px;
+            font-size: 2.8rem;
+            text-align: center;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: #fff;
+            padding: 30px 40px;
+            border-radius: 16px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+            transition: box-shadow 0.3s ease;
+        }
+
+        .container:hover {
+            box-shadow: 0 25px 50px rgba(0,0,0,0.2);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+            display: block;
+            color: #555;
+        }
+
+        input[type="file"], select, input[type="color"] {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1.5px solid #ddd;
+            font-size: 1rem;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+        }
+
+        input[type="file"]:focus, select:focus, input[type="color"]:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 8px #667eea88;
+            outline: none;
+        }
+
+        button {
+            background: #667eea;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            font-weight: 600;
+            padding: 14px 25px;
+            border-radius: 12px;
+            cursor: pointer;
+            margin-top: 15px;
+            width: 100%;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 6px 12px rgba(102,126,234,0.5);
+        }
+
+        button:hover {
+            background: #5a6fd6;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 25px rgba(102,126,234,0.7);
+        }
+
+        #chartSuggest {
+            color: #667eea;
+            font-weight: 600;
+            font-style: normal;
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1rem;
+        }
+
+        canvas {
+            margin-top: 40px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+            opacity: 0;
+            animation: fadeIn 0.7s forwards;
+        }
+
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px 15px;
+            }
+            h2 {
+                font-size: 2rem;
+            }
+            button {
+                font-size: 1rem;
+                padding: 12px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<h2>Interactive Data Visualization</h2>
+<div class="container">
+    <form id="uploadForm">
+        <div class="form-group">
+            <label>Upload Data File (CSV/Excel):</label>
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" required>
+        </div>
+
+        <div class="form-group">
+            <label>Select Column for Categories:</label>
+            <select id="categoryColumn" required></select>
+        </div>
+
+        <div class="form-group">
+            <label>Select Column for Values:</label>
+            <select id="valueColumn" required></select>
+        </div>
+
+        <div class="form-group">
+            <label>Choose Graph Type:</label>
+            <select id="chartType">
+                <option value="bar">Bar Chart</option>
+                <option value="line">Line Chart</option>
+                <option value="pie">Pie Chart</option>
+                <option value="doughnut">Doughnut Chart</option>
+            </select>
+            <small id="chartSuggest"></small>
+        </div>
+
+        <div class="form-group">
+            <label>Choose Graph Color:</label>
+            <input type="color" id="chartColor" value="#36a2eb">
+        </div>
+
+        <button type="submit">Generate Chart</button>
+    </form>
+
+    <canvas id="chartCanvas"></canvas>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+<script>
+let chartInstance = null;
+let fileData = [];
+
+document.getElementById('fileInput').addEventListener('change', function(event) {
+    let file = event.target.files[0];
+    if (file) {
+        Papa.parse(file, {
+            header: true,
+            complete: function(results) {
+                fileData = results.data;
+                let columns = Object.keys(fileData[0]);
+                let categorySelect = document.getElementById('categoryColumn');
+                let valueSelect = document.getElementById('valueColumn');
+
+                categorySelect.innerHTML = "";
+                valueSelect.innerHTML = "";
+
+                columns.forEach(col => {
+                    let opt1 = new Option(col, col);
+                    let opt2 = new Option(col, col);
+                    categorySelect.add(opt1);
+                    valueSelect.add(opt2);
+                });
+
+                updateSuggestion(); // Suggest chart type after loading
+            }
+        });
+    }
+});
+
+function suggestChartType(categories, values) {
+    let uniqueCategories = [...new Set(categories.filter(c => c !== undefined && c !== ""))];
+    let numCategories = uniqueCategories.length;
+    let numericValues = values.filter(v => !isNaN(v));
+    let allNumeric = numericValues.length === values.length;
+
+    if (!allNumeric) {
+        return "bar";  // fallback
+    }
+
+    let isTimeSeries = uniqueCategories.every(c => {
+        return !isNaN(Date.parse(c));
+    });
+
+    if (isTimeSeries) return "line";
+
+    if (numCategories > 1 && numCategories <= 10) {
+        return "pie";
+    }
+
+    if (numCategories > 10) {
+        return "bar";
+    }
+
+    return "bar"; // default fallback
+}
+
+function updateSuggestion() {
+    let categoryCol = document.getElementById('categoryColumn').value;
+    let valueCol = document.getElementById('valueColumn').value;
+
+    if (!categoryCol || !valueCol) {
+        document.getElementById('chartSuggest').textContent = "";
+        return;
+    }
+
+    let categories = fileData.map(row => row[categoryCol]);
+    let values = fileData.map(row => parseFloat(row[valueCol]));
+
+    let suggestedType = suggestChartType(categories, values);
+    document.getElementById('chartSuggest').textContent = `Suggested chart: ${suggestedType.charAt(0).toUpperCase() + suggestedType.slice(1)} Chart`;
+
+    document.getElementById('chartType').value = suggestedType;
+}
+
+document.getElementById('categoryColumn').addEventListener('change', updateSuggestion);
+document.getElementById('valueColumn').addEventListener('change', updateSuggestion);
+
+document.getElementById('uploadForm').addEventListener('submit', function(event) {
+    event.preventDefault();
+
+    let categoryCol = document.getElementById('categoryColumn').value;
+    let valueCol = document.getElementById('valueColumn').value;
+    let chartType = document.getElementById('chartType').value;
+    let chartColor = document.getElementById('chartColor').value;
+
+    let categories = fileData.map(row => row[categoryCol]);
+    let values = fileData.map(row => parseFloat(row[valueCol]));
+
+    if (chartInstance) chartInstance.destroy();
+
+    const ctx = document.getElementById('chartCanvas').getContext('2d');
+    chartInstance = new Chart(ctx, {
+        type: chartType,
+        data: {
+            labels: categories,
+            datasets: [{
+                label: valueCol,
+                data: values,
+                backgroundColor: (chartType === "bar" || chartType === "line") ? chartColor : categories.map(() => chartColor),
+                borderColor: chartColor,
+                borderWidth: 1,
+                fill: chartType === "line" ? false : true,
+                tension: chartType === "line" ? 0.4 : 0
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: (chartType === "pie" || chartType === "doughnut") ? {} : { y: { beginAtZero: true } }
+        }
+    });
+});
+function aggregateData(categories, values) {
+    let agg = {};
+    categories.forEach((cat, idx) => {
+        if (cat && !isNaN(values[idx])) {
+            agg[cat] = (agg[cat] || 0) + values[idx];
+        }
+    });
+    return agg;
+}
+
+document.getElementById('uploadForm').addEventListener('submit', function(event) {
+    event.preventDefault();
+
+    let categoryCol = document.getElementById('categoryColumn').value;
+    let valueCol = document.getElementById('valueColumn').value;
+    let chartType = document.getElementById('chartType').value;
+    let chartColor = document.getElementById('chartColor').value;
+
+    let categories = fileData.map(row => row[categoryCol]);
+    let values = fileData.map(row => parseFloat(row[valueCol]));
+
+    // Aggregate sales by category
+    let aggregated = aggregateData(categories, values);
+    let aggCategories = Object.keys(aggregated);
+    let aggValues = Object.values(aggregated);
+
+    if (chartInstance) chartInstance.destroy();
+
+    const ctx = document.getElementById('chartCanvas').getContext('2d');
+    chartInstance = new Chart(ctx, {
+        type: chartType,
+        data: {
+            labels: aggCategories,
+            datasets: [{
+                label: valueCol,
+                data: aggValues,
+                backgroundColor: (chartType === "bar" || chartType === "line") ? chartColor : aggCategories.map(() => chartColor),
+                borderColor: chartColor,
+                borderWidth: 1,
+                fill: chartType === "line" ? false : true,
+                tension: chartType === "line" ? 0.4 : 0
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: (chartType === "pie" || chartType === "doughnut") ? {} : { y: { beginAtZero: true } }
+        }
+    });
+});
+
+</script>
+
+</body>
+</html>
