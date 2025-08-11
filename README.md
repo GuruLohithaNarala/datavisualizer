@@ -17,7 +17,7 @@ An interactive web app to **upload**, **visualize**, and **customize** your data
 
 1. Clone this repo:  
    ```bash
-   git clone https://github.com/gurulohithanarala/DataVisualizer.git
+   git clone https://github.com/GuruLohithaNarala/DataVisualizer.git
 Navigate to the folder:
 
 bash
